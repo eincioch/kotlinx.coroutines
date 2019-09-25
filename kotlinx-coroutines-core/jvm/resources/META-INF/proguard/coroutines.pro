@@ -8,3 +8,7 @@
 -keepclassmembernames class kotlinx.** {
     volatile <fields>;
 }
+
+-assumenosideeffects class kotlinx.coroutines.internal.FastServiceLoader {
+    boolean ANDROID_DETECTED return true;
+}

@@ -5,3 +5,7 @@
 # - META-INF/com.android.tools/r8-upto-1.6.0/coroutines.pro
 
 -keep class kotlinx.coroutines.android.AndroidDispatcherFactory {*;}
+
+-assumenosideeffects class kotlinx.coroutines.internal.FastServiceLoader {
+    boolean ANDROID_DETECTED return true;
+}
