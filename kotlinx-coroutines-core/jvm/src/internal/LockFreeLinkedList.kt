@@ -106,7 +106,7 @@ public actual open class LockFreeLinkedListNode {
     // prev.next correction, which does not provide linearizable backwards iteration, but can be used to
     // resume forward iteration when current node was removed.
     public actual val prevNode: Node
-        get() = correctPrev(null, true) ?: findPrevNonRemoved(_prev.value)
+        get() = correctPrev(null) ?: findPrevNonRemoved(_prev.value)
 
     private tailrec fun findPrevNonRemoved(current: Node): Node {
         if (!current.isRemoved) return current
@@ -249,7 +249,7 @@ public actual open class LockFreeLinkedListNode {
             val removed = (next as Node).removed()
             if (_next.compareAndSet(next, removed)) {
                 // was removed successfully (linearized remove) -- fixup the list
-                next.correctPrev(null, false)
+                next.correctPrev(null)
                 return null
             }
         }
@@ -272,7 +272,7 @@ public actual open class LockFreeLinkedListNode {
             node = next.ref
         }
         // Found a non-removed node
-        node.correctPrev(null, false)
+        node.correctPrev(null)
     }
 
     public actual fun removeFirstOrNull(): Node? {
@@ -332,7 +332,7 @@ public actual open class LockFreeLinkedListNode {
 
         // Returns null when atomic op got into deadlock trying to help operation that started later (RETRY_ATOMIC)
         final override fun takeAffectedNode(op: OpDescriptor): Node? =
-            queue.correctPrev(op, true) // queue head is never removed, so null result can only mean RETRY_ATOMIC
+            queue.correctPrev(op) // queue head is never removed, so null result can only mean RETRY_ATOMIC
 
         private val _affectedNode = atomic<Node?>(null)
         final override val affectedNode: Node? get() = _affectedNode.value
@@ -407,7 +407,7 @@ public actual open class LockFreeLinkedListNode {
         final override fun finishOnSuccess(affected: Node, next: Node) {
             // Complete removal operation here. It bails out if next node is also removed and it becomes
             // responsibility of the next's removes to call correctPrev which would help fix all the links.
-            next.correctPrev(null, false)
+            next.correctPrev(null)
         }
     }
 
@@ -432,7 +432,7 @@ public actual open class LockFreeLinkedListNode {
                 if (affected._next.compareAndSet(this, removed)) {
                     // Complete removal operation here. It bails out if next node is also removed and it becomes
                     // responsibility of the next's removes to call correctPrev which would help fix all the links.
-                    next.correctPrev(null, false)
+                    next.correctPrev(null)
                 }
                 return REMOVE_PREPARED
             }
@@ -564,12 +564,8 @@ public actual open class LockFreeLinkedListNode {
      * * When [op] descriptor is not `null` and and operation descriptor that is [OpDescriptor.isEarlierThan]
      *   that current [op] is found while traversing the list. This `null` result will be translated
      *   by callers to [RETRY_ATOMIC].
-     *
-     * @param [fixupPrev] when set to `true` this function ensure that `this.prev.next === this` after return from
-     *   this call. Otherwise, it will not retry on CAS failure. It is set to `true` when
-     *   looking for a previous node in [prevNode] in a linearizable way.
      */
-    private tailrec fun correctPrev(op: OpDescriptor?, fixupPrev: Boolean): Node? {
+    private tailrec fun correctPrev(op: OpDescriptor?): Node? {
         val oldPrev = _prev.value
         var prev: Node = oldPrev
         var last: Node? = null // will be set so that last.next === prev
@@ -580,9 +576,9 @@ public actual open class LockFreeLinkedListNode {
                 prevNext === this -> {
                     if (oldPrev === prev) return prev // nothing to update -- all is fine, prev found
                     // otherwise need to update prev
-                    if (!this._prev.compareAndSet(oldPrev, prev) && fixupPrev) {
-                        // Note: retry from scratch on failure to update prev only when fixupPrev is true
-                        return correctPrev(op, true)
+                    if (!this._prev.compareAndSet(oldPrev, prev)) {
+                        // Note: retry from scratch on failure to update prev
+                        return correctPrev(op)
                     }
                     return prev // return a correct prev
                 }
@@ -593,13 +589,13 @@ public actual open class LockFreeLinkedListNode {
                     if (op != null && op.isEarlierThan(prevNext))
                         return null // RETRY_ATOMIC
                     prevNext.perform(prev)
-                    return correctPrev(op, fixupPrev) // retry from scratch
+                    return correctPrev(op) // retry from scratch
                 }
                 prevNext is Removed -> {
                     if (last !== null) {
                         // newly added (prev) node is already removed, correct last.next around it
                         if (!last._next.compareAndSet(prev, prevNext.ref)) {
-                            return correctPrev(op, fixupPrev) // retry from scratch on failure to update next
+                            return correctPrev(op) // retry from scratch on failure to update next
                         }
                         prev = last
                         last = null
@@ -615,12 +611,8 @@ public actual open class LockFreeLinkedListNode {
         }
     }
 
-    internal fun validateNode(prev: Node, next: Node, stress: Boolean) {
-        if (!stress) {
-            // during stress test prev can be corrupted and it is Ok. It does not
-            // have to absolutely correct as it is fixed on "as needed" basis
-            assert { prev === this._prev.value }
-        }
+    internal fun validateNode(prev: Node, next: Node) {
+        assert { prev === this._prev.value }
         assert { next === this._next.value }
     }
 
@@ -660,15 +652,15 @@ public actual open class LockFreeLinkedListHead : LockFreeLinkedListNode() {
     override val isRemoved: Boolean get() = false
     override fun nextIfRemoved(): Node? = null
 
-    internal fun validate(stress: Boolean = false) {
+    internal fun validate() {
         var prev: Node = this
         var cur: Node = next as Node
         while (cur != this) {
             val next = cur.nextNode
-            cur.validateNode(prev, next, stress)
+            cur.validateNode(prev, next)
             prev = cur
             cur = next
         }
-        validateNode(prev, next as Node, stress)
+        validateNode(prev, next as Node)
     }
 }

@@ -83,6 +83,6 @@ class LockFreeLinkedListShortStressTest : TestBase() {
         assertEquals(missed.get(), removed.get())
         assertTrue(undone.get() > 0)
         assertTrue(missed.get() > 0)
-        list.validate(stress = true)
+        list.validate()
     }
 }

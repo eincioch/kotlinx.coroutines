@@ -4,13 +4,13 @@
 
 package kotlinx.coroutines.internal
 
-import kotlinx.atomicfu.LockFreedomTestEnvironment
-import kotlinx.coroutines.stressTestMultiplier
+import kotlinx.atomicfu.*
+import kotlinx.coroutines.*
+import org.junit.*
 import org.junit.Assert.*
-import org.junit.Test
 import java.util.*
+import java.util.concurrent.atomic.*
 import java.util.concurrent.atomic.AtomicLong
-import java.util.concurrent.atomic.AtomicReference
 
 /**
  * This stress test has 4 threads adding randomly to the list and them immediately undoing
@@ -103,7 +103,7 @@ class LockFreeLinkedListAtomicLFStressTest {
         assertEquals(missed.get(), removed.get())
         assertTrue(undone.get() > 0)
         assertTrue(missed.get() > 0)
-        lists.forEach { it.validate(stress = true) }
+        lists.forEach { it.validate() }
     }
 
     private fun addLastOp(list: LockFreeLinkedListHead, node: IntNode) {
