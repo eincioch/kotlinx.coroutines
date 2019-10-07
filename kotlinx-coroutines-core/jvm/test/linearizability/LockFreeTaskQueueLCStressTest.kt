@@ -14,10 +14,8 @@ import org.jetbrains.kotlinx.lincheck.verifier.*
 import org.jetbrains.kotlinx.lincheck.verifier.quiescent.*
 import kotlin.test.*
 
-@Param(name = "value", gen = IntGen::class, conf = "1:5")
-internal open class LockFreeTaskQueueWithoutRemoveLCStressTest protected constructor(singleConsumer: Boolean) : VerifierState() {
-    constructor(): this(false) // for `testWithoutRemove`
-
+@Param(name = "value", gen = IntGen::class, conf = "1:3")
+internal abstract class AbstractLockFreeTaskQueueWithoutRemoveLCStressTest protected constructor(singleConsumer: Boolean) : VerifierState() {
     @JvmField
     protected val q = LockFreeTaskQueue<Int>(singleConsumer = singleConsumer)
 
@@ -28,15 +26,16 @@ internal open class LockFreeTaskQueueWithoutRemoveLCStressTest protected constru
     fun addLast(@Param(name = "value") value: Int) = q.addLast(value)
 
     override fun extractState() = q.map { it } to q.isClosed()
+}
 
+internal class LockFreeTaskQueueWithoutRemoveLCStressTest : AbstractLockFreeTaskQueueWithoutRemoveLCStressTest(singleConsumer = false) {
     @Test
     fun testWithoutRemove() = LCStressOptionsDefault()
         .actorsPerThread(if (isStressTest) 5 else 3)
         .check(this::class)
 }
 
-
-internal class MCLockFreeTaskQueueWithRemoveLCStressTest : LockFreeTaskQueueWithoutRemoveLCStressTest(singleConsumer = false) {
+internal class MCLockFreeTaskQueueWithRemoveLCStressTest : AbstractLockFreeTaskQueueWithoutRemoveLCStressTest(singleConsumer = false) {
     @Operation
     fun removeFirstOrNull() = q.removeFirstOrNull()
 
@@ -47,7 +46,7 @@ internal class MCLockFreeTaskQueueWithRemoveLCStressTest : LockFreeTaskQueueWith
 }
 
 @OpGroupConfig(name = "consumer", nonParallel = true)
-internal class SCLockFreeTaskQueueWithRemoveLCStressTest : LockFreeTaskQueueWithoutRemoveLCStressTest(singleConsumer = true) {
+internal class SCLockFreeTaskQueueWithRemoveLCStressTest : AbstractLockFreeTaskQueueWithoutRemoveLCStressTest(singleConsumer = true) {
     @Operation(group = "consumer")
     fun removeFirstOrNull() = q.removeFirstOrNull()
 

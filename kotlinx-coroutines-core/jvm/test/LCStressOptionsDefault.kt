@@ -10,7 +10,8 @@ import kotlin.reflect.*
 class LCStressOptionsDefault : StressOptions() {
     init {
         iterations(100 * stressTestMultiplierSqrt)
-        invocationsPerIteration(2000 * stressTestMultiplierSqrt)
+        invocationsPerIteration(1000 * stressTestMultiplierSqrt)
+        actorsBefore(if (isStressTest) 3 else 0)
         threads(3)
         actorsPerThread(if (isStressTest) 3 else 2)
     }
