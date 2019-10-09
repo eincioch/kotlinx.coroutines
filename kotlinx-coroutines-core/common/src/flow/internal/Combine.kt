@@ -52,18 +52,20 @@ internal suspend fun <R, T> FlowCollector<R>.combineInternal(
 ) {
     coroutineScope {
         val size = flows.size
-        val channels =
-            Array(size) { asFairChannel(flows[it]) }
+        val channels = Array(size) { asFairChannel(flows[it]) }
         val latestValues = arrayOfNulls<Any?>(size)
         val isClosed = Array(size) { false }
+        var nonClosed = size
+        var hasValues = false
 
         // See flow.combine(other) for explanation.
-        while (!isClosed.all { it }) {
+        while (nonClosed != 0) {
             select<Unit> {
                 for (i in 0 until size) {
-                    onReceive(isClosed[i], channels[i], { isClosed[i] = true }) { value ->
+                    onReceive(isClosed[i], channels[i], { isClosed[i] = true; --nonClosed }) { value ->
                         latestValues[i] = value
-                        if (latestValues.all { it !== null }) {
+                        if (!hasValues) hasValues = latestValues.allNonNull()
+                        if (hasValues) {
                             val arguments = arrayFactory()
                             for (index in 0 until size) {
                                 arguments[index] = NULL.unbox(latestValues[index])
@@ -76,6 +78,8 @@ internal suspend fun <R, T> FlowCollector<R>.combineInternal(
         }
     }
 }
+
+private fun Array<Any?>.allNonNull() = all { it !== null }
 
 private inline fun SelectBuilder<Unit>.onReceive(
     isClosed: Boolean,
