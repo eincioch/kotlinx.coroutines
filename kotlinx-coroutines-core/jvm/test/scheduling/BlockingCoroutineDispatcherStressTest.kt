@@ -7,7 +7,6 @@
 package kotlinx.coroutines.scheduling
 
 import kotlinx.coroutines.*
-import org.junit.*
 import org.junit.Test
 import java.util.concurrent.*
 import java.util.concurrent.atomic.*
@@ -42,7 +41,7 @@ class BlockingCoroutineDispatcherStressTest : SchedulerTestBase() {
         for (i in CORES_COUNT + 1..CORES_COUNT * 2) {
             require(i !in observedConcurrency.keys) { "Unexpected state: $observedConcurrency" }
         }
-        checkPoolThreadsCreated(CORES_COUNT..CORES_COUNT + CORES_COUNT * 2)
+        checkPoolThreadsCreated(CORES_COUNT..CORES_COUNT * 3)
     }
 
     @Test

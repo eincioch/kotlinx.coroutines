@@ -245,9 +245,7 @@ internal class CoroutineScheduler(
     private inline fun incrementCreatedWorkers(): Int = createdWorkers(controlState.incrementAndGet())
     private inline fun decrementCreatedWorkers(): Int = createdWorkers(controlState.getAndDecrement())
 
-    private inline fun incrementBlockingTasks() {
-        controlState.addAndGet(1L shl BLOCKING_SHIFT)
-    }
+    private inline fun incrementBlockingTasks() = controlState.addAndGet(1L shl BLOCKING_SHIFT)
 
     private inline fun decrementBlockingTasks() {
         controlState.addAndGet(-(1L shl BLOCKING_SHIFT))
@@ -372,20 +370,20 @@ internal class CoroutineScheduler(
     }
 
     private fun signalBlockingWork() {
-        incrementBlockingTasks()
+        val stateSnapshot = incrementBlockingTasks()
         if (tryUnpark()) return
-        tryCreateWorker()
+        tryCreateWorker(stateSnapshot)
     }
 
     internal fun signalCpuWork() {
+        // todo probably here we should use state snapshot as well
         if (tryUnpark() || availableCpuPermits == 0) return
         if (tryCreateWorker()) return
         // TODO investigate
         tryUnpark() // Try unpark again in case there was race between permit release and parking
     }
 
-    private fun tryCreateWorker(): Boolean {
-        val state = controlState.value
+    private fun tryCreateWorker(state: Long = controlState.value): Boolean {
         val created = createdWorkers(state)
         val blocking = blockingTasks(state)
         val cpuWorkers = created - blocking
