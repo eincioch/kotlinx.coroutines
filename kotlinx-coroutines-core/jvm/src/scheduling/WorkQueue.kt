@@ -103,7 +103,7 @@ internal class WorkQueue {
      * or positive value of how many nanoseconds should pass until the head of this queue will be available to steal.
      */
     fun tryStealFrom(victim: WorkQueue): Long {
-        if (victim.stealBatch { task -> add(task) }) {
+        if (victim.stealBatch { task -> add(task).also { assert { it == null } } }) {
             return TASK_STOLEN
         }
         return tryStealLastScheduled(victim)

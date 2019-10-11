@@ -8,8 +8,10 @@ package kotlinx.coroutines.scheduling
 
 import kotlinx.coroutines.*
 import org.junit.*
+import org.junit.Test
 import java.util.concurrent.*
 import java.util.concurrent.atomic.*
+import kotlin.test.*
 
 class BlockingCoroutineDispatcherStressTest : SchedulerTestBase() {
 
@@ -29,7 +31,7 @@ class BlockingCoroutineDispatcherStressTest : SchedulerTestBase() {
                 try {
                     val currentlyExecuting = concurrentWorkers.incrementAndGet()
                     observedConcurrency[currentlyExecuting] = true
-                    require(currentlyExecuting <= CORES_COUNT)
+                    assertTrue(currentlyExecuting <= CORES_COUNT)
                 } finally {
                     concurrentWorkers.decrementAndGet()
                 }
@@ -37,11 +39,9 @@ class BlockingCoroutineDispatcherStressTest : SchedulerTestBase() {
         }
 
         tasks.forEach { it.await() }
-        require(tasks.isNotEmpty())
         for (i in CORES_COUNT + 1..CORES_COUNT * 2) {
             require(i !in observedConcurrency.keys) { "Unexpected state: $observedConcurrency" }
         }
-
         checkPoolThreadsCreated(CORES_COUNT..CORES_COUNT + CORES_COUNT * 2)
     }
 
@@ -97,7 +97,7 @@ class BlockingCoroutineDispatcherStressTest : SchedulerTestBase() {
             // Should eat all limit * 3 cpu without any starvation
             val tasks = (1..blockingLimit).map { async(blocking) { barrier.await() } }
 
-            tasks.forEach { require(it.isActive) }
+            tasks.forEach { assertTrue(it.isActive) }
             barrier.await()
             tasks.joinAll()
         }
@@ -117,7 +117,7 @@ class BlockingCoroutineDispatcherStressTest : SchedulerTestBase() {
             // Should eat all limit * 3 cpu without any starvation
             val tasks = (1..blockingLimit).map { async(blocking) { barrier.await() } }
 
-            tasks.forEach { require(it.isActive) }
+            tasks.forEach { assertTrue(it.isActive) }
             barrier.await()
             tasks.joinAll()
             cpuTasks.forEach { it.cancelAndJoin() }

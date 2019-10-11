@@ -55,9 +55,7 @@ class WorkQueueStressTest : TestBase() {
                 val myQueue = WorkQueue()
                 startLatch.await()
                 while (!producerFinished || producerQueue.size != 0) {
-                    if (myQueue.size > 100) {
-                        stolenTasks[i].addAll(myQueue.drain().map { task(it) })
-                    }
+                    stolenTasks[i].addAll(myQueue.drain().map { task(it) })
                     myQueue.tryStealFrom(victim = producerQueue)
                 }
 
