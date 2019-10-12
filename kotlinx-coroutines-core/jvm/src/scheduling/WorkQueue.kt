@@ -79,17 +79,19 @@ internal class WorkQueue {
      * `null` if task was added, task that wasn't added otherwise.
      */
     fun addLast(task: Task): Task? {
+        // TODO resolve this potential state race
         if (bufferSize == BUFFER_CAPACITY - 1) return task
-        val headLocal = producerIndex.value
-        val nextIndex = headLocal and MASK
-
+        val nextIndex = producerIndex.value and MASK
         /*
-         * If current element is not null then we're racing with consumers for the tail. If we skip this check then
-         * the consumer can null out current element and it will be lost. If we're racing for tail then
-         * the queue is close to overflowing => return task
+         * If current element is not null then we're racing with a really slow consumer that committed the consumer index,
+         * but hasn't yet nulled out the slot, effectively preventing us from using it.
+         * Such situations are very rare in practise (although possible) and we decided to give up a progress guarantee
+         * to have a stronger invariant "add to queue with bufferSize == 0 is always successful".
+         * This algorithm can still be wait-free for add, but if and only if tasks are not reusable, otherwise
+         * nulling out the buffer wouldn't be possible.
          */
-        if (buffer[nextIndex] != null) {
-            return task
+        while (buffer[nextIndex] != null) {
+            Thread.yield()
         }
         buffer.lazySet(nextIndex, task)
         producerIndex.incrementAndGet()
@@ -103,6 +105,7 @@ internal class WorkQueue {
      * or positive value of how many nanoseconds should pass until the head of this queue will be available to steal.
      */
     fun tryStealFrom(victim: WorkQueue): Long {
+        assert { bufferSize == 0 }
         if (victim.stealBatch { task -> add(task).also { assert { it == null } } }) {
             return TASK_STOLEN
         }
