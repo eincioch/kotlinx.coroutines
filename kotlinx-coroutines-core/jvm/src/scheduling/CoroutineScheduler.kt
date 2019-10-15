@@ -429,7 +429,7 @@ internal class CoroutineScheduler(
             val cpuWorkers = created - blocking
             // Double check for overprovision
             if (cpuWorkers >= corePoolSize) return 0
-            if (created >= maxPoolSize || availableCpuPermits == 0) return 0
+            if (created >= maxPoolSize) return 0
             // start & register new worker, commit index only after successful creation
             val newIndex = createdWorkers + 1
             require(newIndex > 0 && workers[newIndex] == null)
@@ -856,7 +856,8 @@ internal class CoroutineScheduler(
              * 2) It helps with rare race when external submitter sends depending blocking tasks
              *    one by one and one of the requested workers may miss CPU token
              */
-            return localQueue.poll() ?: globalQueue.removeFirstWithModeOrNull(TaskMode.PROBABLY_BLOCKING)
+            val task =  localQueue.poll() ?: globalQueue.removeFirstWithModeOrNull(TaskMode.PROBABLY_BLOCKING)
+            return task ?: trySteal(blockingOnly = true)
         }
 
         private fun findTaskWithCpuPermit(): Task? {
@@ -874,10 +875,10 @@ internal class CoroutineScheduler(
             if (globalFirst) globalQueue.removeFirstWithModeOrNull(TaskMode.NON_BLOCKING)?.let { return it }
             localQueue.poll()?.let { return it }
             if (!globalFirst) globalQueue.removeFirstOrNull()?.let { return it }
-            return trySteal()
+            return trySteal(blockingOnly = false)
         }
 
-        private fun trySteal(): Task? {
+        private fun trySteal(blockingOnly: Boolean): Task? {
             assert { localQueue.size == 0 }
             val created = createdWorkers
             // 0 to await an initialization and 1 to avoid excess stealing on single-core machines
@@ -893,7 +894,11 @@ internal class CoroutineScheduler(
                 val worker = workers[currentIndex]
                 if (worker !== null && worker !== this) {
                     assert { localQueue.size == 0 }
-                    val stealResult = localQueue.tryStealFrom(victim = worker.localQueue)
+                    val stealResult = if (blockingOnly) {
+                        localQueue.tryStealBlockingFrom(victim = worker.localQueue)
+                    } else {
+                        localQueue.tryStealFrom(victim = worker.localQueue)
+                    }
                     if (stealResult == TASK_STOLEN) {
                         return localQueue.poll()
                     } else if (stealResult > 0) {

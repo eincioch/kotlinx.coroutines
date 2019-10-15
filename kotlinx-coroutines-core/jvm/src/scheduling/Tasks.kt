@@ -90,6 +90,8 @@ internal abstract class Task(
     val mode: TaskMode get() = taskContext.taskMode
 }
 
+internal inline val Task.isBlocking get() = taskContext.taskMode == TaskMode.PROBABLY_BLOCKING
+
 // Non-reusable Task implementation to wrap Runnable instances that do not otherwise implement task
 internal class TaskImpl(
     @JvmField val block: Runnable,

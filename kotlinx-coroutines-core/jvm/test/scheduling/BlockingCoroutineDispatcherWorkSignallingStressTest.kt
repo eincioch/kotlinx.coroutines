@@ -14,10 +14,6 @@ import kotlin.test.*
 
 class BlockingCoroutineDispatcherWorkSignallingStressTest : SchedulerTestBase() {
 
-    init {
-        corePoolSize = CORES_COUNT
-    }
-
     @Test
     fun testCpuTasksStarvation() = runBlocking {
         val iterations = 1000 * stressTestMultiplier

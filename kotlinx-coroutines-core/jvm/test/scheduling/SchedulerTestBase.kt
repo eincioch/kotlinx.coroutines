@@ -66,15 +66,12 @@ abstract class SchedulerTestBase : TestBase() {
         suspend fun Iterable<Job>.joinAll() = forEach { it.join() }
     }
 
-    private val exception = atomic<Throwable?>(null)
-    private val handler = CoroutineExceptionHandler { _, e -> exception.value = e }
-
     protected var corePoolSize = CORES_COUNT
     protected var maxPoolSize = 1024
     protected var idleWorkerKeepAliveNs = IDLE_WORKER_KEEP_ALIVE_NS
 
     private var _dispatcher: ExperimentalCoroutineDispatcher? = null
-    protected val dispatcher: CoroutineContext
+    protected val dispatcher: CoroutineDispatcher
         get() {
             if (_dispatcher == null) {
                 _dispatcher = ExperimentalCoroutineDispatcher(
@@ -84,21 +81,21 @@ abstract class SchedulerTestBase : TestBase() {
                 )
             }
 
-            return _dispatcher!! + handler
+            return _dispatcher!!
         }
 
     protected var blockingDispatcher = lazy {
         blockingDispatcher(1000)
     }
 
-    protected fun blockingDispatcher(parallelism: Int): CoroutineContext {
+    protected fun blockingDispatcher(parallelism: Int): CoroutineDispatcher {
         val intitialize = dispatcher
-        return _dispatcher!!.blocking(parallelism) + handler
+        return _dispatcher!!.blocking(parallelism)
     }
 
-    protected fun view(parallelism: Int): CoroutineContext {
+    protected fun view(parallelism: Int): CoroutineDispatcher {
         val intitialize = dispatcher
-        return _dispatcher!!.limited(parallelism) + handler
+        return _dispatcher!!.limited(parallelism)
     }
 
     @After
@@ -108,6 +105,5 @@ abstract class SchedulerTestBase : TestBase() {
                 _dispatcher?.close()
             }
         }
-        exception.value?.let { throw it }
     }
 }

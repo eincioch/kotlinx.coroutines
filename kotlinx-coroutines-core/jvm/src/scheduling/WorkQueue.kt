@@ -102,15 +102,31 @@ internal class WorkQueue {
             assert { added == null }
             return TASK_STOLEN
         }
-        return tryStealLastScheduled(victim)
+        return tryStealLastScheduled(victim, blockingOnly = false)
+    }
+
+    fun tryStealBlockingFrom(victim: WorkQueue): Long {
+        assert { bufferSize == 0 }
+        val buffer = victim.buffer
+        for (i in 0 until BUFFER_CAPACITY) {
+            val value = buffer[i] ?: continue
+            // TODO ABA
+            if (value.isBlocking && buffer.compareAndSet(i, value, null)) {
+                add(value)
+                return TASK_STOLEN
+            }
+        }
+        return tryStealLastScheduled(victim, blockingOnly = true)
     }
 
     /**
      * Contract on return value is the same as for [tryStealFrom]
      */
-    private fun tryStealLastScheduled(victim: WorkQueue): Long {
+    private fun tryStealLastScheduled(victim: WorkQueue, blockingOnly: Boolean): Long {
         while (true) {
             val lastScheduled = victim.lastScheduledTask.value ?: return NOTHING_TO_STEAL
+            if (blockingOnly && !lastScheduled.isBlocking) return NOTHING_TO_STEAL
+
             // TODO time wraparound ?
             val time = schedulerTimeSource.nanoTime()
             val staleness = time - lastScheduled.submissionTime
@@ -159,7 +175,8 @@ internal class WorkQueue {
             if (tailLocal - producerIndex.value == 0) return null
             val index = tailLocal and MASK
             if (consumerIndex.compareAndSet(tailLocal, tailLocal + 1)) {
-                return buffer.getAndSet(index, null)
+                // Nulls are allowed when blocking tasks are stolen from the middle of the queue.
+                return buffer.getAndSet(index, null) ?: continue
             }
         }
     }
