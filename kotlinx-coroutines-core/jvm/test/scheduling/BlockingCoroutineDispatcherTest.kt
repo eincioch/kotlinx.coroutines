@@ -28,7 +28,7 @@ class BlockingCoroutineDispatcherTest : SchedulerTestBase() {
 
         nonBlockingJob.join()
         blockingJob.join()
-        checkPoolThreadsCreated(2)
+        checkPoolThreadsCreated(3)
     }
 
     @Test
@@ -45,7 +45,7 @@ class BlockingCoroutineDispatcherTest : SchedulerTestBase() {
         }
 
         blocking.join()
-        checkPoolThreadsCreated(2)
+        checkPoolThreadsCreated(3)
     }
 
     @Test
@@ -77,7 +77,6 @@ class BlockingCoroutineDispatcherTest : SchedulerTestBase() {
         tasks.forEach { require(it.isActive) }
         barrier.await()
         tasks.joinAll()
-        checkPoolThreadsCreated(101)
     }
 
     @Test

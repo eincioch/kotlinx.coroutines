@@ -75,21 +75,19 @@ class CoroutineSchedulerStressTest : TestBase() {
                     Thread.yield()
                 }
             }
-
             // Block current thread
             finishLatch.await()
         })
 
         finishLatch.await()
 
-        require(!observedThreads.containsKey(blockingThread!!))
+        assertFalse(observedThreads.containsKey(blockingThread!!))
         validateResults()
     }
 
     private fun processTask() {
         val counter = observedThreads[Thread.currentThread()] ?: 0L
         observedThreads[Thread.currentThread()] = counter + 1
-
         if (processed.incrementAndGet() == tasksNum) {
             finishLatch.countDown()
         }

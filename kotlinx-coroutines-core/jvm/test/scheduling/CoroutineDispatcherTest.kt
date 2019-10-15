@@ -19,6 +19,7 @@ class CoroutineDispatcherTest : SchedulerTestBase() {
 
     @Test
     fun testSingleThread() = runBlocking {
+        corePoolSize = 1
         expect(1)
         withContext(dispatcher) {
             require(Thread.currentThread() is CoroutineScheduler.Worker)
@@ -41,14 +42,12 @@ class CoroutineDispatcherTest : SchedulerTestBase() {
     fun testFairScheduling() = runBlocking {
         corePoolSize = 1
         expect(1)
-
         val outerJob = launch(dispatcher) {
             val d1 = launch(dispatcher) { expect(3) }
             val d2 = launch(dispatcher) { expect(4) }
             val d3 = launch(dispatcher) { expect(2) }
             listOf(d1, d2, d3).joinAll()
         }
-
         outerJob.join()
         finish(5)
     }
@@ -63,7 +62,6 @@ class CoroutineDispatcherTest : SchedulerTestBase() {
                 expect(2)
                 flag.set(true)
             }
-
             while (!flag.get()) {
                 Thread.yield() // Block current thread, submitted inner job will be stolen
             }
@@ -71,7 +69,6 @@ class CoroutineDispatcherTest : SchedulerTestBase() {
             innerJob.await()
             expect(3)
         }
-
         job.await()
         finish(4)
         checkPoolThreadsCreated(2)
@@ -100,7 +97,6 @@ class CoroutineDispatcherTest : SchedulerTestBase() {
                 "OK"
             }
             assertEquals("OK", result)
-
             val nullResult = withTimeoutOrNull(1000) {
                 expect(3)
                 while (true) {
