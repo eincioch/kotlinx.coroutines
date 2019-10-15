@@ -50,7 +50,7 @@ internal val MAX_POOL_SIZE = systemProp(
 
 @JvmField
 internal val IDLE_WORKER_KEEP_ALIVE_NS = TimeUnit.SECONDS.toNanos(
-    systemProp("kotlinx.coroutines.scheduler.keep.alive.sec", 5L)
+    systemProp("kotlinx.coroutines.scheduler.keep.alive.sec", 60L)
 )
 
 @JvmField

@@ -317,7 +317,7 @@ internal class CoroutineScheduler(
                 }
                 val state = worker.state
                 assert { state === WorkerState.TERMINATED } // Expected TERMINATED state
-                worker.localQueue.offloadAllWork(globalQueue)
+                worker.localQueue.offloadAllWorkTo(globalQueue)
             }
         }
         // Make sure no more work is added to GlobalQueue from anywhere
@@ -346,12 +346,14 @@ internal class CoroutineScheduler(
         trackTask() // this is needed for virtual time support
         val task = createTask(block, taskContext)
         // try to submit the task to the local queue and act depending on the result
-        if (!submitToLocalQueue(task, fair)) {
-            if (!globalQueue.addLast(task)) {
+        val notAdded = submitToLocalQueue(task, fair)
+        if (notAdded != null) {
+            if (!globalQueue.addLast(notAdded)) {
                 // Global queue is closed in the last step of close/shutdown -- no more tasks should be accepted
                 throw RejectedExecutionException("$schedulerName was terminated")
             }
         }
+        // Checking 'task' instead of 'notAdded' is completely okay
         if (task.mode == TaskMode.NON_BLOCKING) {
             signalCpuWork()
         } else {
@@ -445,24 +447,22 @@ internal class CoroutineScheduler(
     }
 
     /**
-     * Returns `true` if added, `false` otherwise.
+     * Returns `null` if task was successfully added or an instance of the
+     * task that was not added or replaced (thus should be added to global queue).
      */
-    private fun submitToLocalQueue(task: Task, fair: Boolean): Boolean {
-        val worker = currentWorker() ?: return false
-
+    private fun submitToLocalQueue(task: Task, fair: Boolean): Task? {
+        val worker = currentWorker() ?: return task
         /*
          * This worker could have been already terminated from this thread by close/shutdown and it should not
          * accept any more tasks into its local queue.
          */
-        if (worker.state === WorkerState.TERMINATED) return false
+        if (worker.state === WorkerState.TERMINATED) return task
         if (task.mode == TaskMode.NON_BLOCKING && worker.isBlocking) {
-           return false
+           return task
         }
-        val notAdded = with(worker.localQueue) {
+        return with(worker.localQueue) {
             if (fair) addLast(task) else add(task)
-        } ?: return true // Forgive me, Father, for this formatting
-        globalQueue.addLast(notAdded)
-        return true
+        } ?: return null
     }
 
     private fun currentWorker(): Worker? = (Thread.currentThread() as? Worker)?.takeIf { it.scheduler == this }

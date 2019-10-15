@@ -25,16 +25,6 @@ internal const val NOTHING_TO_STEAL = -2L
  * [WorkQueue] provides semi-FIFO order, but with priority for most recently submitted task assuming
  * that these two (current one and submitted) are communicating and sharing state thus making such communication extremely fast.
  * E.g. submitted jobs [1, 2, 3, 4] will be executed in [4, 1, 2, 3] order.
- *
- * ### Work offloading
- * 
- * When the queue is full, half of existing tasks are offloaded to global queue which is regularly polled by other pool workers.
- * Offloading occurs in LIFO order for the sake of implementation simplicity: offloads should be extremely rare and occurs only in specific use-cases
- * (e.g. when coroutine starts heavy fork-join-like computation), so fairness is not important.
- * As an alternative, offloading directly to some [CoroutineScheduler.Worker] may be used, but then the strategy of selecting any idle worker
- * should be implemented and implementation should be aware multiple producers.
- *
- * @suppress **This is unstable API and it is subject to change.**
  */
 internal class WorkQueue {
 
@@ -61,7 +51,7 @@ internal class WorkQueue {
 
     /**
      * Retrieves and removes task from the head of the queue
-     * Invariant: this method is called only by the owner of the queue ([stealBatch] is not)
+     * Invariant: this method is called only by the owner of the queue.
      */
     fun poll(): Task? = lastScheduledTask.getAndSet(null) ?: pollBuffer()
 
@@ -106,7 +96,10 @@ internal class WorkQueue {
      */
     fun tryStealFrom(victim: WorkQueue): Long {
         assert { bufferSize == 0 }
-        if (victim.stealBatch { task -> add(task).also { assert { it == null } } }) {
+        val task  = victim.pollBuffer()
+        if (task != null) {
+            val added = add(task)
+            assert { added == null }
             return TASK_STOLEN
         }
         return tryStealLastScheduled(victim)
@@ -147,39 +140,17 @@ internal class WorkQueue {
         assert { added }
     }
 
-    internal fun offloadAllWork(globalQueue: GlobalQueue) {
+    internal fun offloadAllWorkTo(globalQueue: GlobalQueue) {
         lastScheduledTask.getAndSet(null)?.let { globalQueue.add(it) }
-        while (stealBatchTo(globalQueue)) {
+        while (pollTo(globalQueue)) {
             // Steal everything
         }
     }
 
-    /**
-     * Method that is invoked by external workers to steal work.
-     * Half of the buffer (at least 1) is stolen, returns `true` if at least one task was stolen.
-     */
-    private inline fun stealBatch(consumer: (Task) -> Unit): Boolean {
-        val size = bufferSize
-        if (size == 0) return false
-        var toSteal = (size / 2).coerceAtLeast(1)
-        var wasStolen = false
-        while (toSteal-- > 0) {
-            val tailLocal = consumerIndex.value
-            if (tailLocal - producerIndex.value == 0) return wasStolen
-            val index = tailLocal and MASK
-            val element = buffer[index] ?: continue
-            if (consumerIndex.compareAndSet(tailLocal, tailLocal + 1)) {
-                // 1) Help GC 2) Signal producer that this slot is consumed and may be used
-                consumer(element)
-                buffer[index] = null
-                wasStolen = true
-            }
-        }
-        return wasStolen
-    }
-
-    private fun stealBatchTo(queue: GlobalQueue): Boolean {
-        return stealBatch { queue.add(it) }
+    private fun pollTo(queue: GlobalQueue): Boolean {
+        val task = pollBuffer() ?: return false
+        queue.add(task)
+        return true
     }
 
     private fun pollBuffer(): Task? {

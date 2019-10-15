@@ -88,12 +88,12 @@ class BlockingCoroutineDispatcherStressTest : SchedulerTestBase() {
             repeat(CORES_COUNT) {
                 async(dispatcher) {
                     // These two will be stolen first
-                    blockingTasks += async(blockingDispatcher) { blockingBarrier.await() }
-                    blockingTasks += async(blockingDispatcher) { blockingBarrier.await() }
-                    // Empty on CPU job which should be executed while blocked tasks are hang
-                    cpuTasks += async(dispatcher) { cpuBarrier.await() }
+                    blockingTasks += blockingAwait(blockingDispatcher, blockingBarrier)
+                    blockingTasks += blockingAwait(blockingDispatcher, blockingBarrier)
+                    // Empty on CPU job which should be executed while blocked tasks are waiting
+                    cpuTasks += cpuAwait(dispatcher, cpuBarrier)
                     // Block with next task. Block cores * 3 threads in total
-                    blockingTasks += async(blockingDispatcher) { blockingBarrier.await() }
+                    blockingTasks += blockingAwait(blockingDispatcher, blockingBarrier)
                 }
             }
 
@@ -106,6 +106,17 @@ class BlockingCoroutineDispatcherStressTest : SchedulerTestBase() {
             dispatcher.close()
         }
     }
+
+    private fun CoroutineScope.blockingAwait(
+        blockingDispatcher: CoroutineDispatcher,
+        blockingBarrier: CyclicBarrier
+    ) = async(blockingDispatcher) { blockingBarrier.await() }
+
+
+    private fun CoroutineScope.cpuAwait(
+        blockingDispatcher: CoroutineDispatcher,
+        blockingBarrier: CyclicBarrier
+    ) = async(blockingDispatcher) { blockingBarrier.await() }
 
     @Test
     fun testBlockingTasksStarvation() = runBlocking {

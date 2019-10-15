@@ -6,11 +6,15 @@ package kotlinx.coroutines.scheduling
 
 import kotlinx.coroutines.*
 import org.junit.*
+import org.junit.rules.*
 import java.util.concurrent.*
 
 class BlockingCoroutineDispatcherTest : SchedulerTestBase() {
 
-    @Test(timeout = 1_000)
+    @get:Rule
+    val timeout = Timeout.seconds(10L)!!
+
+    @Test
     fun testNonBlockingWithBlockingExternal() = runBlocking {
         val barrier = CyclicBarrier(2)
 
@@ -27,7 +31,7 @@ class BlockingCoroutineDispatcherTest : SchedulerTestBase() {
         checkPoolThreadsCreated(2)
     }
 
-    @Test(timeout = 10_000)
+    @Test
     fun testNonBlockingFromBlocking() = runBlocking {
         val barrier = CyclicBarrier(2)
 
@@ -44,7 +48,7 @@ class BlockingCoroutineDispatcherTest : SchedulerTestBase() {
         checkPoolThreadsCreated(2)
     }
 
-    @Test(timeout = 1_000)
+    @Test
     fun testScheduleBlockingThreadCount() = runTest {
         // After first iteration pool is idle, repeat, no new threads should be created
         repeat(2) {
@@ -59,7 +63,7 @@ class BlockingCoroutineDispatcherTest : SchedulerTestBase() {
         }
     }
 
-    @Test(timeout = 1_000)
+    @Test
     fun testNoCpuStarvation() = runBlocking {
         val tasksNum = 100
         val barrier = CyclicBarrier(tasksNum + 1)
@@ -76,7 +80,7 @@ class BlockingCoroutineDispatcherTest : SchedulerTestBase() {
         checkPoolThreadsCreated(101)
     }
 
-    @Test(timeout = 1_000)
+    @Test
     fun testNoCpuStarvationWithMultipleBlockingContexts() = runBlocking {
         val firstBarrier = CyclicBarrier(11)
         val secondBarrier = CyclicBarrier(11)
@@ -101,7 +105,7 @@ class BlockingCoroutineDispatcherTest : SchedulerTestBase() {
         checkPoolThreadsCreated(21..22)
     }
 
-    @Test(timeout = 1_000)
+    @Test
     fun testNoExcessThreadsCreated() = runBlocking {
         corePoolSize = 4
 
