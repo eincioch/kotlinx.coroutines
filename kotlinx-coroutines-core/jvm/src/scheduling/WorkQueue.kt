@@ -48,6 +48,7 @@ internal class WorkQueue {
 
     private val producerIndex = atomic(0)
     private val consumerIndex = atomic(0)
+    private val blockingTasksInBuffer = atomic(0)
 
     /**
      * Retrieves and removes task from the head of the queue
@@ -59,7 +60,8 @@ internal class WorkQueue {
      * Invariant: Called only by the owner of the queue, returns
      * `null` if task was added, task that wasn't added otherwise.
      */
-    fun add(task: Task): Task? {
+    fun add(task: Task, fair: Boolean = false): Task? {
+        if (fair) return addLast(task)
         val previous = lastScheduledTask.getAndSet(task) ?: return null
         return addLast(previous)
     }
@@ -68,8 +70,8 @@ internal class WorkQueue {
      * Invariant: Called only by the owner of the queue, returns
      * `null` if task was added, task that wasn't added otherwise.
      */
-    fun addLast(task: Task): Task? {
-        // TODO resolve this potential state race
+    private fun addLast(task: Task): Task? {
+        if (task.isBlocking) blockingTasksInBuffer.incrementAndGet()
         if (bufferSize == BUFFER_CAPACITY - 1) return task
         val nextIndex = producerIndex.value and MASK
         /*
@@ -109,14 +111,23 @@ internal class WorkQueue {
         assert { bufferSize == 0 }
         val buffer = victim.buffer
         for (i in 0 until BUFFER_CAPACITY) {
+            if (victim.blockingTasksInBuffer.value == 0) break
             val value = buffer[i] ?: continue
             // TODO ABA
             if (value.isBlocking && buffer.compareAndSet(i, value, null)) {
+                victim.blockingTasksInBuffer.decrementAndGet()
                 add(value)
                 return TASK_STOLEN
             }
         }
         return tryStealLastScheduled(victim, blockingOnly = true)
+    }
+
+    fun offloadAllWorkTo(globalQueue: GlobalQueue) {
+        lastScheduledTask.getAndSet(null)?.let { globalQueue.add(it) }
+        while (pollTo(globalQueue)) {
+            // Steal everything
+        }
     }
 
     /**
@@ -146,23 +157,6 @@ internal class WorkQueue {
         }
     }
 
-    private fun GlobalQueue.add(task: Task) {
-        /*
-         * globalQueue is closed as the very last step in the shutdown sequence when all worker threads had
-         * been already shutdown (with the only exception of the last worker thread that might be performing
-         * shutdown procedure itself). As a consistency check we do a [cheap!] check that it is not closed here yet.
-         */
-        val added = addLast(task)
-        assert { added }
-    }
-
-    internal fun offloadAllWorkTo(globalQueue: GlobalQueue) {
-        lastScheduledTask.getAndSet(null)?.let { globalQueue.add(it) }
-        while (pollTo(globalQueue)) {
-            // Steal everything
-        }
-    }
-
     private fun pollTo(queue: GlobalQueue): Boolean {
         val task = pollBuffer() ?: return false
         queue.add(task)
@@ -176,8 +170,27 @@ internal class WorkQueue {
             val index = tailLocal and MASK
             if (consumerIndex.compareAndSet(tailLocal, tailLocal + 1)) {
                 // Nulls are allowed when blocking tasks are stolen from the middle of the queue.
-                return buffer.getAndSet(index, null) ?: continue
+                val value = buffer.getAndSet(index, null) ?: continue
+                value.decrementIfBlocking()
+                return value
             }
         }
     }
+
+    private fun Task?.decrementIfBlocking() {
+        if (this != null && isBlocking) {
+            val value = blockingTasksInBuffer.decrementAndGet()
+            assert { value >= 0 }
+        }
+    }
+}
+
+private fun GlobalQueue.add(task: Task) {
+    /*
+     * globalQueue is closed as the very last step in the shutdown sequence when all worker threads had
+     * been already shutdown (with the only exception of the last worker thread that might be performing
+     * shutdown procedure itself). As a consistency check we do a [cheap!] check that it is not closed here yet.
+     */
+    val added = addLast(task)
+    assert { added }
 }

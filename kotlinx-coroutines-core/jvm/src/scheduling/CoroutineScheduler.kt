@@ -460,9 +460,7 @@ internal class CoroutineScheduler(
         if (task.mode == TaskMode.NON_BLOCKING && worker.isBlocking) {
            return task
         }
-        return with(worker.localQueue) {
-            if (fair) addLast(task) else add(task)
-        } ?: return null
+        return worker.localQueue.add(task, fair = fair)
     }
 
     private fun currentWorker(): Worker? = (Thread.currentThread() as? Worker)?.takeIf { it.scheduler == this }
